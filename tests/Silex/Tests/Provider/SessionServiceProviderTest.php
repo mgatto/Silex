@@ -12,47 +12,69 @@
 namespace Silex\Tests\Provider;
 
 use Silex\Application;
+use Silex\WebTestCase;
 use Silex\Provider\SessionServiceProvider;
 
 use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\HttpFoundation\SessionStorage\ArraySessionStorage;
 
 /**
  * SessionProvider test cases.
  *
  * @author Igor Wiedler <igor@wiedler.ch>
+ * @author Fabien Potencier <fabien@symfony.com>
  */
-class SessionServiceProviderTest extends \PHPUnit_Framework_TestCase
+class SessionServiceProviderTest extends WebTestCase
 {
     public function testRegister()
     {
+        /**
+         * Smoke test
+         */
+        $defaultStorage = $this->app['session.storage.native'];
+
+        $client = $this->createClient();
+
+        $client->request('get', '/login');
+        $this->assertEquals('Logged in successfully.', $client->getResponse()->getContent());
+
+        $client->request('get', '/account');
+        $this->assertEquals('This is your account.', $client->getResponse()->getContent());
+
+        $client->request('get', '/logout');
+        $this->assertEquals('Logged out successfully.', $client->getResponse()->getContent());
+
+        $client->request('get', '/account');
+        $this->assertEquals('You are not logged in.', $client->getResponse()->getContent());
+    }
+
+    public function createApplication()
+    {
         $app = new Application();
 
-        $app->register(new SessionServiceProvider());
-
-        $app['session.storage'] = $app->share(function () use ($app) {
-            return new ArraySessionStorage();
-        });
+        $app->register(new SessionServiceProvider(), array(
+            'session.test' => true,
+        ));
 
         $app->get('/login', function () use ($app) {
             $app['session']->set('logged_in', true);
+
             return 'Logged in successfully.';
         });
 
         $app->get('/account', function () use ($app) {
             if (!$app['session']->get('logged_in')) {
-                return 'You are not in.';
+                return 'You are not logged in.';
             }
 
             return 'This is your account.';
         });
 
-        $request = Request::create('/login');
-        $response = $app->handle($request);
-        $this->assertEquals('Logged in successfully.', $response->getContent());
+        $app->get('/logout', function () use ($app) {
+            $app['session']->invalidate();
 
-        $request = Request::create('/account');
-        $response = $app->handle($request);
-        $this->assertEquals('This is your account.', $response->getContent());
+            return 'Logged out successfully.';
+        });
+
+        return $app;
     }
 }
